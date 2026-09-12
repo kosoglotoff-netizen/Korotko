@@ -78,6 +78,52 @@ LOCAL_TRAGEDY_KEYWORDS = [
 EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS
 
 
+# --- Транслітерація українського тексту в глаголицю (Unicode-блок U+2C00–U+2C5F) ---
+# Глаголиця створювалась для староцерковнослов'янської, тож кілька сучасних
+# українських літер (Ґ, Є, Ї, Й, Ь) не мають окремого історичного відповідника —
+# для них використано найближчий базовий знак (за потреби з діакритикою).
+_GLAGOLITIC_BASE = {
+    "А": 0x2C00, "Б": 0x2C01, "В": 0x2C02, "Г": 0x2C03, "Ґ": 0x2C03,
+    "Д": 0x2C04, "Е": 0x2C05, "Є": 0x2C05, "Ж": 0x2C06, "З": 0x2C08,
+    "И": 0x2C09, "І": 0x2C0B, "К": 0x2C0D, "Л": 0x2C0E, "М": 0x2C0F,
+    "Н": 0x2C10, "О": 0x2C11, "П": 0x2C12, "Р": 0x2C13, "С": 0x2C14,
+    "Т": 0x2C15, "У": 0x2C16, "Ф": 0x2C17, "Х": 0x2C18, "Ц": 0x2C1C,
+    "Ч": 0x2C1D, "Ш": 0x2C1E, "Щ": 0x2C1B, "Ь": 0x2C20, "Ю": 0x2C23,
+    "Я": 0x2C24,
+}
+# Літери, яких немає окремо в глаголиці — беремо найближчу базову + діакритика
+_GLAGOLITIC_COMBINING = {
+    "Ї": ("І", "\u0308"),  # І + діереза
+    "Й": ("И", "\u0306"),  # И + бревіс (короткість)
+}
+
+
+def _glagolitic_char(ch):
+    upper = ch.upper()
+    is_lower = ch.islower()
+
+    if upper in _GLAGOLITIC_COMBINING:
+        base_letter, mark = _GLAGOLITIC_COMBINING[upper]
+        codepoint = _GLAGOLITIC_BASE[base_letter]
+        if is_lower:
+            codepoint += 0x30
+        return chr(codepoint) + mark
+
+    if upper in _GLAGOLITIC_BASE:
+        codepoint = _GLAGOLITIC_BASE[upper]
+        if is_lower:
+            codepoint += 0x30
+        return chr(codepoint)
+
+    return ch  # цифри, пунктуація, пробіли, латиниця — без змін
+
+
+def to_glagolitic(text):
+    if not text:
+        return text
+    return "".join(_glagolitic_char(ch) for ch in text)
+
+
 def is_excluded(title, summary, categories):
     text = f"{title} {summary}".lower()
     for kw in EXCLUDE_KEYWORDS:
@@ -211,15 +257,16 @@ def translate_item(title, summary):
 
 def build_message(items):
     today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
-    lines = [f"🌍 <b>Світові новини — {today}</b>", ""]
+    header = to_glagolitic(f"🌍 Світові новини — {today}")
+    lines = [f"<b>{header}</b>", ""]
 
     if not items:
-        lines.append("Сьогодні свіжих новин зі стрічок не знайдено.")
+        lines.append(to_glagolitic("Сьогодні свіжих новин зі стрічок не знайдено."))
     else:
         for i, item in enumerate(items, start=1):
             title_uk_raw, summary_uk_raw = translate_item(item["title"], item["summary"])
-            title_uk = html.escape(title_uk_raw)
-            summary_uk = html.escape(summary_uk_raw)
+            title_uk = html.escape(to_glagolitic(title_uk_raw))
+            summary_uk = html.escape(to_glagolitic(summary_uk_raw))
 
             lines.append(f"{i}. <b>{title_uk}</b>")
             if summary_uk:
