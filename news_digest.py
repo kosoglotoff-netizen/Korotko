@@ -14,13 +14,14 @@
 import os
 import re
 import sys
+import time
 import html
 from datetime import datetime, timezone, timedelta
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from deep_translator import GoogleTranslator
+from deep_translator import GoogleTranslator, MyMemoryTranslator
 
 # --- Джерела новин: великі, надійні агенції зі світовим охопленням ---
 FEEDS = [
@@ -124,14 +125,60 @@ def filter_and_rank(items):
     return unique[:MAX_ITEMS]
 
 
-def translate_uk(text):
+# Ознаки того, що замість перекладу повернулась сторінка помилки перекладача
+_ERROR_MARKERS = ("error 500", "that\u2019s an error", "that's an error", "please try again later")
+
+
+def _looks_like_error(text):
+    if not text:
+        return True
+    low = text.lower()
+    return any(marker in low for marker in _ERROR_MARKERS)
+
+
+def translate_text(text, retries=3, base_delay=2.0):
+    """Перекладає текст українською. Пробує Google Translate (безкоштовний доступ)
+    з повторними спробами при тимчасовому блокуванні, потім MyMemory як запасний варіант."""
     if not text:
         return text
+
+    for attempt in range(retries):
+        try:
+            result = GoogleTranslator(source="auto", target="uk").translate(text)
+            if result and not _looks_like_error(result):
+                return result
+        except Exception as e:
+            print(f"[WARN] GoogleTranslator спроба {attempt + 1} не вдалася: {e}", file=sys.stderr)
+        time.sleep(base_delay * (attempt + 1))
+
+    # Запасний перекладач, якщо Google тимчасово заблокував запити
     try:
-        return GoogleTranslator(source="auto", target="uk").translate(text)
+        chunk = text[:490]  # MyMemory обмежує довжину запиту
+        result = MyMemoryTranslator(source="en-GB", target="uk-UA").translate(chunk)
+        if result and not _looks_like_error(result):
+            return result
     except Exception as e:
-        print(f"[WARN] Переклад не вдався, лишаю оригінал: {e}", file=sys.stderr)
-        return text
+        print(f"[WARN] MyMemoryTranslator також не вдався: {e}", file=sys.stderr)
+
+    print("[WARN] Переклад не вдався, лишаю оригінал англійською.", file=sys.stderr)
+    return text
+
+
+def translate_item(title, summary):
+    """Перекладає заголовок і лід одним запитом (щоб зменшити кількість звернень
+    до безкоштовного перекладача і не наштовхнутись на обмеження частоти)."""
+    if not summary:
+        return translate_text(title), ""
+
+    combined = f"{title}\n{summary}"
+    translated = translate_text(combined)
+
+    if "\n" in translated:
+        parts = translated.split("\n", 1)
+        return parts[0].strip(), parts[1].strip()
+
+    # Якщо переклад "з'їв" перенос рядка — перекладаємо окремо
+    return translate_text(title), translate_text(summary)
 
 
 def build_message(items):
@@ -142,14 +189,16 @@ def build_message(items):
         lines.append("Сьогодні свіжих новин зі стрічок не знайдено.")
     else:
         for i, item in enumerate(items, start=1):
-            title_uk = html.escape(translate_uk(item["title"]))
-            summary_uk = html.escape(translate_uk(item["summary"]))
+            title_uk_raw, summary_uk_raw = translate_item(item["title"], item["summary"])
+            title_uk = html.escape(title_uk_raw)
+            summary_uk = html.escape(summary_uk_raw)
 
             lines.append(f"{i}. <b>{title_uk}</b>")
             if summary_uk:
                 lines.append(summary_uk)
             lines.append(f"📰 {item['source']} — {item['link']}")
             lines.append("")
+            time.sleep(1.0)
 
     return "\n".join(lines)
 
