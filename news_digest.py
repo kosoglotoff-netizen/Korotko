@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Щоденний дайджест світових новин у Telegram.
+Щоденний дайджест світових новин у Telegram — глаголицею (шрифт Galabir).
 
-Бере кілька надійних RSS-стрічок, витягує лід (короткий зміст) кожної статті,
-відфільтровує спортивні новини, перекладає українською (безкоштовно, без API-ключа)
-і надсилає дайджест у Telegram-чат/канал через Bot API.
+Бере кілька надійних RSS-стрічок, витягує лід кожної статті, відфільтровує
+спорт/шоубізнес/кримінал/локальні трагедії, перекладає українською
+(безкоштовно, без API-ключа) і рендерить дайджест як зображення шрифтом
+Galabir (авторська "глаголична" стилізація кирилиці), яке надсилається в
+Telegram. Посилання на джерела йдуть окремим текстовим повідомленням під
+картинкою (щоб лишались клікабельними).
 
-Змінні середовища (задаються як GitHub Secrets):
+Змінні середовища (GitHub Secrets):
     TELEGRAM_BOT_TOKEN  — токен бота від @BotFather
     TELEGRAM_CHAT_ID    — ID чату/каналу, куди слати повідомлення
 """
@@ -22,6 +25,7 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator, MyMemoryTranslator
+from PIL import Image, ImageDraw, ImageFont
 
 # --- Джерела новин: великі, надійні агенції зі світовим охопленням ---
 FEEDS = [
@@ -30,16 +34,19 @@ FEEDS = [
     ("NPR World", "https://feeds.npr.org/1004/rss.xml"),
 ]
 
-# Скільки новин публікувати за раз
 MAX_ITEMS = 8
-
-# Не показувати новини старіші за це число годин (уникнути дублів day-to-day)
 MAX_AGE_HOURS = 30
-
-# Максимальна довжина ліда (символів) до перекладу
 LEAD_MAX_CHARS = 400
 
-# Ключові слова для відсіювання спортивних новин
+FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Galabir_04.ttf")
+IMAGE_WIDTH = 1080
+MARGIN = 50
+TITLE_SIZE = 34
+BODY_SIZE = 28
+LINE_SPACING = 10
+BLOCK_SPACING = 34
+
+# --- Ключові слова для фільтрації небажаних категорій ---
 SPORT_KEYWORDS = [
     "football", "soccer", "nba", "nfl", "nhl", "mlb", "tennis", "golf",
     "cricket", "rugby", "olympic", "olympics", "athlete", "match", "tournament",
@@ -50,7 +57,6 @@ SPORT_KEYWORDS = [
     "super bowl", "grand prix", "marathon", "cyclist", "cycling", "sport",
 ]
 
-# Шоубізнес / знаменитості
 ENTERTAINMENT_KEYWORDS = [
     "celebrity", "actor ", "actress", "singer", "album", "premiere",
     "red carpet", "hollywood", "grammy", "oscar", "oscars", "cannes",
@@ -59,7 +65,6 @@ ENTERTAINMENT_KEYWORDS = [
     "engaged to", "divorce from", "dating rumors", "influencer",
 ]
 
-# Кримінальна хроніка (окремі злочини, не масштабні системні новини)
 CRIME_KEYWORDS = [
     "murder", "shooting at", "stabbing", "stabbed", "arrested for",
     "convicted", "sentenced to", "on trial for", "robbery", "kidnap",
@@ -67,7 +72,6 @@ CRIME_KEYWORDS = [
     "manhunt", "gunman", "hostage situation", "police say", "suspect in",
 ]
 
-# Локальні трагедії/нещасні випадки без глобального значення
 LOCAL_TRAGEDY_KEYWORDS = [
     "nursing home", "care home", "retirement home", "house fire",
     "residential fire", "apartment fire", "car crash", "road accident",
@@ -76,52 +80,6 @@ LOCAL_TRAGEDY_KEYWORDS = [
 ]
 
 EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS
-
-
-# --- Транслітерація українського тексту в глаголицю (Unicode-блок U+2C00–U+2C5F) ---
-# Глаголиця створювалась для староцерковнослов'янської, тож кілька сучасних
-# українських літер (Ґ, Є, Ї, Й, Ь) не мають окремого історичного відповідника —
-# для них використано найближчий базовий знак (за потреби з діакритикою).
-_GLAGOLITIC_BASE = {
-    "А": 0x2C00, "Б": 0x2C01, "В": 0x2C02, "Г": 0x2C03, "Ґ": 0x2C03,
-    "Д": 0x2C04, "Е": 0x2C05, "Є": 0x2C05, "Ж": 0x2C06, "З": 0x2C08,
-    "И": 0x2C09, "І": 0x2C0B, "К": 0x2C0D, "Л": 0x2C0E, "М": 0x2C0F,
-    "Н": 0x2C10, "О": 0x2C11, "П": 0x2C12, "Р": 0x2C13, "С": 0x2C14,
-    "Т": 0x2C15, "У": 0x2C16, "Ф": 0x2C17, "Х": 0x2C18, "Ц": 0x2C1C,
-    "Ч": 0x2C1D, "Ш": 0x2C1E, "Щ": 0x2C1B, "Ь": 0x2C20, "Ю": 0x2C23,
-    "Я": 0x2C24,
-}
-# Літери, яких немає окремо в глаголиці — беремо найближчу базову + діакритика
-_GLAGOLITIC_COMBINING = {
-    "Ї": ("І", "\u0308"),  # І + діереза
-    "Й": ("И", "\u0306"),  # И + бревіс (короткість)
-}
-
-
-def _glagolitic_char(ch):
-    upper = ch.upper()
-    is_lower = ch.islower()
-
-    if upper in _GLAGOLITIC_COMBINING:
-        base_letter, mark = _GLAGOLITIC_COMBINING[upper]
-        codepoint = _GLAGOLITIC_BASE[base_letter]
-        if is_lower:
-            codepoint += 0x30
-        return chr(codepoint) + mark
-
-    if upper in _GLAGOLITIC_BASE:
-        codepoint = _GLAGOLITIC_BASE[upper]
-        if is_lower:
-            codepoint += 0x30
-        return chr(codepoint)
-
-    return ch  # цифри, пунктуація, пробіли, латиниця — без змін
-
-
-def to_glagolitic(text):
-    if not text:
-        return text
-    return "".join(_glagolitic_char(ch) for ch in text)
 
 
 def is_excluded(title, summary, categories):
@@ -156,10 +114,7 @@ def fetch_all_items():
 
         for entry in parsed.entries:
             published = entry.get("published_parsed") or entry.get("updated_parsed")
-            if published:
-                pub_dt = datetime(*published[:6], tzinfo=timezone.utc)
-            else:
-                pub_dt = datetime.now(timezone.utc)
+            pub_dt = datetime(*published[:6], tzinfo=timezone.utc) if published else datetime.now(timezone.utc)
 
             categories = [t.get("term", "") for t in entry.get("tags", [])] if entry.get("tags") else []
             summary_raw = entry.get("summary", "") or entry.get("description", "")
@@ -186,7 +141,6 @@ def filter_and_rank(items):
     fresh = [i for i in items if i["published"] >= cutoff]
     fresh.sort(key=lambda i: i["published"], reverse=True)
 
-    # Прибираємо явні дублі заголовків між джерелами
     seen_titles = set()
     unique = []
     for item in fresh:
@@ -199,7 +153,6 @@ def filter_and_rank(items):
     return unique[:MAX_ITEMS]
 
 
-# Ознаки того, що замість перекладу повернулась сторінка помилки перекладача
 _ERROR_MARKERS = ("error 500", "that\u2019s an error", "that's an error", "please try again later")
 
 
@@ -211,11 +164,8 @@ def _looks_like_error(text):
 
 
 def translate_text(text, retries=3, base_delay=2.0):
-    """Перекладає текст українською. Пробує Google Translate (безкоштовний доступ)
-    з повторними спробами при тимчасовому блокуванні, потім MyMemory як запасний варіант."""
     if not text:
         return text
-
     for attempt in range(retries):
         try:
             result = GoogleTranslator(source="auto", target="uk").translate(text)
@@ -225,9 +175,8 @@ def translate_text(text, retries=3, base_delay=2.0):
             print(f"[WARN] GoogleTranslator спроба {attempt + 1} не вдалася: {e}", file=sys.stderr)
         time.sleep(base_delay * (attempt + 1))
 
-    # Запасний перекладач, якщо Google тимчасово заблокував запити
     try:
-        chunk = text[:490]  # MyMemory обмежує довжину запиту
+        chunk = text[:490]
         result = MyMemoryTranslator(source="en-GB", target="uk-UA").translate(chunk)
         if result and not _looks_like_error(result):
             return result
@@ -239,8 +188,6 @@ def translate_text(text, retries=3, base_delay=2.0):
 
 
 def translate_item(title, summary):
-    """Перекладає заголовок і лід одним запитом (щоб зменшити кількість звернень
-    до безкоштовного перекладача і не наштовхнутись на обмеження частоти)."""
     if not summary:
         return translate_text(title), ""
 
@@ -251,34 +198,84 @@ def translate_item(title, summary):
         parts = translated.split("\n", 1)
         return parts[0].strip(), parts[1].strip()
 
-    # Якщо переклад "з'їв" перенос рядка — перекладаємо окремо
     return translate_text(title), translate_text(summary)
 
 
-def build_message(items):
-    today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
-    header = to_glagolitic(f"🌍 Світові новини — {today}")
-    lines = [f"<b>{header}</b>", ""]
+# --- Рендеринг дайджесту як зображення шрифтом Galabir ---
+
+def _wrap_text(draw, text, font, max_width):
+    words = text.split(" ")
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def render_digest_image(items, date_str, out_path):
+    title_font = ImageFont.truetype(FONT_PATH, TITLE_SIZE)
+    body_font = ImageFont.truetype(FONT_PATH, BODY_SIZE)
+
+    max_text_width = IMAGE_WIDTH - 2 * MARGIN
+
+    # Спершу міряємо висоту на тимчасовому канвасі
+    tmp_img = Image.new("RGB", (IMAGE_WIDTH, 10), "white")
+    tmp_draw = ImageDraw.Draw(tmp_img)
+
+    blocks = []  # list of (font, line_text)
+
+    header = f"Світові новини — {date_str}"
+    for line in _wrap_text(tmp_draw, header, title_font, max_text_width):
+        blocks.append((title_font, line))
+    blocks.append((body_font, ""))  # порожній рядок-відступ
 
     if not items:
-        lines.append(to_glagolitic("Сьогодні свіжих новин зі стрічок не знайдено."))
+        for line in _wrap_text(tmp_draw, "Сьогодні свіжих новин не знайдено.", body_font, max_text_width):
+            blocks.append((body_font, line))
     else:
         for i, item in enumerate(items, start=1):
-            title_uk_raw, summary_uk_raw = translate_item(item["title"], item["summary"])
-            title_uk = html.escape(to_glagolitic(title_uk_raw))
-            summary_uk = html.escape(to_glagolitic(summary_uk_raw))
+            title_uk, summary_uk = translate_item(item["title"], item["summary"])
+            numbered_title = f"{i}. {title_uk}"
 
-            lines.append(f"{i}. <b>{title_uk}</b>")
+            for line in _wrap_text(tmp_draw, numbered_title, title_font, max_text_width):
+                blocks.append((title_font, line))
             if summary_uk:
-                lines.append(summary_uk)
-            lines.append(f"📰 {item['source']} — {item['link']}")
-            lines.append("")
+                for line in _wrap_text(tmp_draw, summary_uk, body_font, max_text_width):
+                    blocks.append((body_font, line))
+            blocks.append((body_font, ""))  # відступ між новинами
             time.sleep(1.0)
 
-    return "\n".join(lines)
+    # Рахуємо загальну висоту
+    total_height = MARGIN * 2
+    line_heights = []
+    for font, line in blocks:
+        bbox = tmp_draw.textbbox((0, 0), line or " ", font=font)
+        h = (bbox[3] - bbox[1]) + LINE_SPACING
+        line_heights.append(h)
+        total_height += h
+
+    img = Image.new("RGB", (IMAGE_WIDTH, total_height), "white")
+    draw = ImageDraw.Draw(img)
+
+    y = MARGIN
+    for (font, line), h in zip(blocks, line_heights):
+        if line:
+            draw.text((MARGIN, y), line, font=font, fill="black")
+        y += h
+
+    img.save(out_path)
+    return items  # повертаємо items з (уже перекладеними) для підпису-посилань
 
 
-def send_to_telegram(text):
+def send_photo_to_telegram(image_path, caption=None):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -286,31 +283,53 @@ def send_to_telegram(text):
         print("[ERROR] TELEGRAM_BOT_TOKEN або TELEGRAM_CHAT_ID не задані.", file=sys.stderr)
         sys.exit(1)
 
-    # Telegram обмежує повідомлення 4096 символами — ріжемо на частини за потреби
-    max_len = 4000
-    chunks = [text[i:i + max_len] for i in range(0, len(text), max_len)] or [text]
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    with open(image_path, "rb") as photo_file:
+        data = {"chat_id": chat_id}
+        if caption:
+            data["caption"] = caption[:1024]
+            data["parse_mode"] = "HTML"
+        resp = requests.post(url, data=data, files={"photo": photo_file}, timeout=30)
+
+    if resp.status_code != 200:
+        print(f"[ERROR] Telegram API повернув {resp.status_code}: {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print("Дайджест-картинку успішно надіслано.")
+
+
+def send_links_message(items):
+    if not items:
+        return
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    lines = ["🔗 <b>Джерела:</b>", ""]
+    for i, item in enumerate(items, start=1):
+        lines.append(f"{i}. {html.escape(item['source'])} — {item['link']}")
+    text = "\n".join(lines)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    for chunk in chunks:
-        resp = requests.post(url, data={
-            "chat_id": chat_id,
-            "text": chunk,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False,
-        }, timeout=20)
+    resp = requests.post(url, data={
+        "chat_id": chat_id,
+        "text": text[:4000],
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }, timeout=20)
 
-        if resp.status_code != 200:
-            print(f"[ERROR] Telegram API повернув {resp.status_code}: {resp.text}", file=sys.stderr)
-            sys.exit(1)
-
-    print("Дайджест успішно надіслано.")
+    if resp.status_code != 200:
+        print(f"[ERROR] Не вдалося надіслати посилання: {resp.status_code}: {resp.text}", file=sys.stderr)
 
 
 def main():
     items = fetch_all_items()
     top_items = filter_and_rank(items)
-    message = build_message(top_items)
-    send_to_telegram(message)
+
+    today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
+    out_path = "/tmp/digest.png"
+    render_digest_image(top_items, today, out_path)
+
+    send_photo_to_telegram(out_path)
+    send_links_message(top_items)
 
 
 if __name__ == "__main__":
