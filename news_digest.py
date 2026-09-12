@@ -50,14 +50,42 @@ SPORT_KEYWORDS = [
     "super bowl", "grand prix", "marathon", "cyclist", "cycling", "sport",
 ]
 
+# Шоубізнес / знаменитості
+ENTERTAINMENT_KEYWORDS = [
+    "celebrity", "actor ", "actress", "singer", "album", "premiere",
+    "red carpet", "hollywood", "grammy", "oscar", "oscars", "cannes",
+    "box office", "tv show", "reality tv", "kardashian", "pop star",
+    "music video", "film festival", "movie review", "royal wedding",
+    "engaged to", "divorce from", "dating rumors", "influencer",
+]
 
-def is_sports(title, summary, categories):
+# Кримінальна хроніка (окремі злочини, не масштабні системні новини)
+CRIME_KEYWORDS = [
+    "murder", "shooting at", "stabbing", "stabbed", "arrested for",
+    "convicted", "sentenced to", "on trial for", "robbery", "kidnap",
+    "burglary", "assault on", "domestic violence", "serial killer",
+    "manhunt", "gunman", "hostage situation", "police say", "suspect in",
+]
+
+# Локальні трагедії/нещасні випадки без глобального значення
+LOCAL_TRAGEDY_KEYWORDS = [
+    "nursing home", "care home", "retirement home", "house fire",
+    "residential fire", "apartment fire", "car crash", "road accident",
+    "traffic accident", "building collapse", "gas explosion",
+    "drowned", "drowning", "avalanche kills",
+]
+
+EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS
+
+
+def is_excluded(title, summary, categories):
     text = f"{title} {summary}".lower()
-    for kw in SPORT_KEYWORDS:
+    for kw in EXCLUDE_KEYWORDS:
         if kw in text:
             return True
     for cat in categories:
-        if "sport" in cat.lower():
+        cat_low = cat.lower()
+        if any(tag in cat_low for tag in ("sport", "entertainment", "showbiz", "celebrity")):
             return True
     return False
 
@@ -92,7 +120,7 @@ def fetch_all_items():
             summary = clean_html(summary_raw)[:LEAD_MAX_CHARS]
             title = entry.get("title", "").strip()
 
-            if is_sports(title, summary, categories):
+            if is_excluded(title, summary, categories):
                 continue
 
             items.append({
