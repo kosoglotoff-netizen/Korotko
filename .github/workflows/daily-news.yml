@@ -1,0 +1,30 @@
+name: Daily Telegram News Digest
+
+on:
+  schedule:
+    # 04:00 UTC = 07:00 за київським часом (літній час, UTC+3).
+    # Взимку (UTC+2) новини прийдуть о 06:00 Києва — за бажанням
+    # зміни на "0 5 * * *", щоб було рівно 07:00 і взимку.
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}  # дозволяє запустити вручну для тесту
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Send news digest to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python news_digest.py
