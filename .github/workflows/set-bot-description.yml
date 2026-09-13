@@ -1,0 +1,43 @@
+name: Set Bot Description
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  set-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Telegram bot description
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python3 - << 'EOF'
+          import os
+          import requests
+
+          token = os.environ["TELEGRAM_BOT_TOKEN"]
+
+          legend_pairs = {
+              "А": 0x2C00, "Б": 0x2C01, "В": 0x2C02, "Г": 0x2C03, "Ґ": 0x2C07,
+              "Д": 0x2C04, "Е": 0x2C05, "Є": 0x2C26, "Ж": 0x2C06, "З": 0x2C08,
+              "И": 0x2C09, "І": 0x2C0B, "Ї": 0x2C0C, "Й": 0x2C0A, "К": 0x2C0D,
+              "Л": 0x2C0E, "М": 0x2C0F, "Н": 0x2C10, "О": 0x2C11, "П": 0x2C12,
+              "Р": 0x2C13, "С": 0x2C14, "Т": 0x2C15, "У": 0x2C16, "Ф": 0x2C17,
+              "Х": 0x2C18, "Ц": 0x2C1C, "Ч": 0x2C1D, "Ш": 0x2C1E, "Щ": 0x2C1B,
+              "Ь": 0x2C20, "Ю": 0x2C23, "Я": 0x2C24,
+          }
+          legend = " ".join(f"{letter}={chr(cp)}" for letter, cp in legend_pairs.items())
+
+          description = (
+              "🌍 Щоденний дайджест головних світових новин, транслітерований у глаголицю.\n\n"
+              "Підказка — відповідність літер:\n" + legend
+          )
+
+          resp = requests.post(
+              f"https://api.telegram.org/bot{token}/setMyDescription",
+              data={"description": description},
+              timeout=20,
+          )
+          print(resp.status_code, resp.text)
+          resp.raise_for_status()
+          EOF
