@@ -23,10 +23,10 @@ jobs:
           chat_id = os.environ["TELEGRAM_CHAT_ID"]
           base = f"https://api.telegram.org/bot{token}"
 
-          # 1. Rename channel
+          # 1. Rename channel (Ukrainian + Glagolitic transliteration)
           resp = requests.post(f"{base}/setChatTitle", data={
               "chat_id": chat_id,
-              "title": "Глаголичні новини",
+              "title": "Глаголичні новини · Ⰳⰾⰰⰳⱁⰾⰻⱍⱀⰹ ⱀⱁⰲⰻⱀⰻ",
           }, timeout=20)
           print("setChatTitle:", resp.status_code, resp.text)
 
