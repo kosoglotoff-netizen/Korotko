@@ -78,6 +78,10 @@ DISASTER_KEYWORDS = [
     "train derail", "derailment", "shipwreck", "ferry sinks", "capsized",
     "explosion kills", "blast kills", "death toll", "rescue operation",
     "wreckage", "disaster", "catastrophe", "storm kills", "collapse kills",
+    "emergency landing", "forced landing", "diverted after", "mid-air",
+    "declares emergency", "engine fire", "smoke in cabin", "runway excursion",
+    "tire burst", "bird strike", "turbulence injures", "grounded after",
+    "aircraft incident", "flight makes emergency",
 ]
 
 EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS + DISASTER_KEYWORDS
