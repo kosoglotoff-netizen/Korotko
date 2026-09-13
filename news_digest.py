@@ -69,7 +69,18 @@ LOCAL_TRAGEDY_KEYWORDS = [
     "drowned", "drowning", "avalanche kills",
 ]
 
-EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS
+DISASTER_KEYWORDS = [
+    "wildfire", "forest fire", "bushfire", "blaze kills", "blaze tears",
+    "fire kills", "fire tears through", "inferno", "fire engulf",
+    "earthquake", "quake kills", "tsunami", "flood", "flooding kills",
+    "hurricane", "typhoon", "cyclone", "tornado", "landslide", "mudslide",
+    "avalanche", "plane crash", "air crash", "helicopter crash",
+    "train derail", "derailment", "shipwreck", "ferry sinks", "capsized",
+    "explosion kills", "blast kills", "death toll", "rescue operation",
+    "wreckage", "disaster", "catastrophe", "storm kills", "collapse kills",
+]
+
+EXCLUDE_KEYWORDS = SPORT_KEYWORDS + ENTERTAINMENT_KEYWORDS + CRIME_KEYWORDS + LOCAL_TRAGEDY_KEYWORDS + DISASTER_KEYWORDS
 
 
 def is_excluded(title, summary, categories):
