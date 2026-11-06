@@ -265,25 +265,38 @@ def to_glagolitic(text):
     return "".join(_glagolitic_char(ch) for ch in text)
 
 
-def build_message(items):
+def translate_items(items):
+    """Перекладає всі новини один раз (використовується і для тексту, і для PDF)."""
+    result = []
+    for item in items:
+        title_uk, summary_uk = translate_item(item["title"], item["summary"])
+        result.append({
+            "title_uk": title_uk,
+            "summary_uk": summary_uk,
+            "source": item["source"],
+            "link": item["link"],
+        })
+        time.sleep(1.0)
+    return result
+
+
+def build_message(translated):
     today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
     header = to_glagolitic(f"🌍 Світові новини — {today}")
     lines = [f"<b>{header}</b>", ""]
 
-    if not items:
+    if not translated:
         lines.append(to_glagolitic("Сьогодні свіжих новин зі стрічок не знайдено."))
     else:
-        for i, item in enumerate(items, start=1):
-            title_uk_raw, summary_uk_raw = translate_item(item["title"], item["summary"])
-            title_uk = html.escape(to_glagolitic(title_uk_raw))
-            summary_uk = html.escape(to_glagolitic(summary_uk_raw))
+        for i, item in enumerate(translated, start=1):
+            title_uk = html.escape(to_glagolitic(item["title_uk"]))
+            summary_uk = html.escape(to_glagolitic(item["summary_uk"]))
 
             lines.append(f"{i}. <b>{title_uk}</b>")
             if summary_uk:
                 lines.append(summary_uk)
             lines.append(f"📰 {item['source']} — {item['link']}")
             lines.append("")
-            time.sleep(1.0)
 
     return "\n".join(lines)
 
@@ -315,11 +328,36 @@ def send_to_telegram(text):
     print("Дайджест успішно надіслано.")
 
 
+def send_pdf_to_telegram(pdf_path, caption):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    with open(pdf_path, "rb") as f:
+        resp = requests.post(
+            url,
+            data={"chat_id": chat_id, "caption": caption[:1000]},
+            files={"document": (os.path.basename(pdf_path), f, "application/pdf")},
+            timeout=60,
+        )
+    if resp.status_code != 200:
+        print(f"[ERROR] Не вдалося надіслати PDF: {resp.status_code}: {resp.text}", file=sys.stderr)
+        sys.exit(1)
+    print("PDF-видання успішно надіслано.")
+
+
 def main():
     items = fetch_all_items()
     top_items = filter_and_rank(items)
-    message = build_message(top_items)
-    send_to_telegram(message)
+    translated = translate_items(top_items)
+
+    send_to_telegram(build_message(translated))
+
+    # PDF-видання шрифтом Galabir з паралельним українським текстом
+    from edition_pdf import build_edition_pdf
+    now = datetime.now(timezone.utc)
+    pdf_path = f"/tmp/glagolychni-novyny-{now.strftime('%Y-%m-%d')}.pdf"
+    build_edition_pdf(translated, pdf_path, date=now)
+    send_pdf_to_telegram(pdf_path, f"📰 PDF-видання за {now.strftime('%d.%m.%Y')}")
 
 
 if __name__ == "__main__":
