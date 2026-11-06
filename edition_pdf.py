@@ -49,24 +49,24 @@ def galabir_safe(text):
 
 def _styles():
     return {
-        "masthead": ParagraphStyle("masthead", fontName="Galabir", fontSize=44, leading=48,
+        "masthead": ParagraphStyle("masthead", fontName="Galabir", fontSize=50, leading=54,
                                    textColor=INK, alignment=TA_LEFT),
-        "masthead_uk": ParagraphStyle("masthead_uk", fontName="Standard", fontSize=8.5,
-                                      leading=11, textColor=GREY, spaceAfter=2),
-        "dateline": ParagraphStyle("dateline", fontName="Galabir", fontSize=13, leading=16,
+        "masthead_uk": ParagraphStyle("masthead_uk", fontName="Standard", fontSize=12,
+                                      leading=15, textColor=GREY, spaceAfter=3),
+        "dateline": ParagraphStyle("dateline", fontName="Galabir", fontSize=19, leading=23,
                                    textColor=GOLD),
-        "dateline_uk": ParagraphStyle("dateline_uk", fontName="Standard", fontSize=7.5,
-                                      leading=10, textColor=GREY),
-        "num": ParagraphStyle("num", fontName="Galabir", fontSize=11, leading=13, textColor=GOLD),
-        "h": ParagraphStyle("h", fontName="Galabir", fontSize=19, leading=23, textColor=INK,
+        "dateline_uk": ParagraphStyle("dateline_uk", fontName="Standard", fontSize=11,
+                                      leading=14, textColor=GREY),
+        "num": ParagraphStyle("num", fontName="Galabir", fontSize=16, leading=19, textColor=GOLD),
+        "h": ParagraphStyle("h", fontName="Galabir", fontSize=29, leading=34, textColor=INK,
                             spaceBefore=2),
-        "h_uk": ParagraphStyle("h_uk", fontName="Standard", fontSize=8, leading=10.5,
-                               textColor=GREY, spaceAfter=5),
-        "lead": ParagraphStyle("lead", fontName="Galabir", fontSize=12, leading=16.5,
+        "h_uk": ParagraphStyle("h_uk", fontName="Standard", fontSize=12.5, leading=16,
+                               textColor=GREY, spaceAfter=8),
+        "lead": ParagraphStyle("lead", fontName="Galabir", fontSize=19, leading=26,
                                textColor=INK),
-        "lead_uk": ParagraphStyle("lead_uk", fontName="Standard", fontSize=7.5, leading=10,
-                                  textColor=GREY, spaceAfter=4),
-        "src": ParagraphStyle("src", fontName="Standard", fontSize=6.5, leading=9, textColor=GOLD),
+        "lead_uk": ParagraphStyle("lead_uk", fontName="Standard", fontSize=11.5, leading=15,
+                                  textColor=GREY, spaceAfter=6),
+        "src": ParagraphStyle("src", fontName="Standard", fontSize=9.5, leading=12.5, textColor=GOLD),
     }
 
 
@@ -75,15 +75,15 @@ def _page_decor(canvas, doc):
     w, h = A4
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.6)
-    canvas.line(20 * mm, 14 * mm, w - 20 * mm, 14 * mm)
-    canvas.setFont("Galabir", 9)
+    canvas.line(7 * mm, 11.5 * mm, w - 7 * mm, 11.5 * mm)
+    canvas.setFont("Galabir", 11)
     canvas.setFillColor(INK)
-    canvas.drawString(20 * mm, 9 * mm, galabir_safe("Глаголичні новини"))
-    canvas.setFont("Standard", 6.5)
+    canvas.drawString(7 * mm, 6.5 * mm, galabir_safe("Глаголичні новини"))
+    canvas.setFont("Standard", 8)
     canvas.setFillColor(GREY)
-    canvas.drawString(20 * mm, 5.5 * mm, "Глаголичні новини · шрифт Galabir")
-    canvas.setFont("Standard", 7)
-    canvas.drawRightString(w - 20 * mm, 7 * mm, str(doc.page))
+    canvas.drawString(7 * mm, 3 * mm, "Глаголичні новини · шрифт Galabir")
+    canvas.setFont("Standard", 9)
+    canvas.drawRightString(w - 7 * mm, 5 * mm, str(doc.page))
     canvas.restoreState()
 
 
@@ -93,8 +93,8 @@ def build_edition_pdf(items, out_path, date=None):
     date_uk = f"{date.day} {MONTHS_UK[date.month - 1]} {date.year}"
     st = _styles()
 
-    doc = BaseDocTemplate(out_path, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
-                          topMargin=18 * mm, bottomMargin=20 * mm,
+    doc = BaseDocTemplate(out_path, pagesize=A4, leftMargin=7 * mm, rightMargin=7 * mm,
+                          topMargin=9 * mm, bottomMargin=15 * mm,
                           title="Глаголичні новини", author="Глаголичні новини")
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f",
                   leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
